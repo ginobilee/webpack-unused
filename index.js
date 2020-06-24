@@ -1,92 +1,71 @@
 #!/usr/bin/env node
 
 'use strict';
-
-
 const Path = require('path');
 const Promisify = require('es6-promisify');
+const fs = require('fs');
+
 const Glob2 = Promisify(require('glob'));
 
-// webpack root? ideally start from package.json location I think
 const cwd = process.cwd();
 
 const argv = require('yargs')
-              .usage('Usage: webpack --stats | $0 [options]')
-              .example('webpack --stats | $0 -s src', 'Check for unused files in the `src/` directory')
-              .alias('s', 'src')
-              .describe('s', 'Directory of source code')
-              .default('s', '.')
-              .help('h')
-              .alias('h', 'help')
-              .argv;
+  .usage('Usage: $0 [options]')
+  .example('$0 -s src --stats dist/stats.json --output dist/unused.txt', 'Check for unused files in the `src/` directory base on webpack stats')
+  .example('$0 -s src --stats dist/stats.json --autodelete', 'Check for unused files in the `src/` directory base on webpack stats')
+  .alias('s', 'src')
+  .describe('s', 'Directory of source code')
+  .default('s', '.')
+  .describe('stats', 'webpack build stats file')
+  .default('stats', './dist/stats.json')
+  .describe('output', 'analyzed unused file result file location')
+  .default('output', './dist/unused.txt')
+  .describe('autodelete', 'auto delete unused file')
+  // .default('autodelete', '0')
+  .help('h')
+  .alias('h', 'help').argv;
 
 // specify which directory to look in for source files
 const srcDir = Path.resolve(argv.src);
+const statsFile = Path.resolve(argv.stats);
+const outputFile = Path.resolve(argv.output);
+const autodelete = argv.autodelete;
 
-const isWebpackLocal = (path) => {
-  return (path.indexOf('./') === 0 && path.indexOf('./~/') === -1);
+const flatten = require('./flatten');
+
+const findAllLocalFiles = () => {
+  return Glob2('!(node_modules)/**/*.*', { cwd: srcDir }).then(files =>
+    files.map(f => Path.join(srcDir, f)),
+  );
 };
 
-const selectLocalModules = (webpack) => {
-  return webpack.modules.filter((module) => isWebpackLocal(module.name))
-                        .map((module) => Path.join(cwd, module.name));
-};
-
-const findAllLocalFiles = (cwd) => {
-  return Glob2('!(node_modules)/**/*.*', { cwd: srcDir })
-          .then((files) => files.map((f) => Path.join(srcDir, f)));
-};
-
-const parseStdin = () => {
-  return new Promise((resolve, reject) => {
-    let data = '';
-
-    process.stdin.setEncoding('utf8');
-
-    process.stdin.on('readable', () => {
-      const chunk = process.stdin.read();
-
-      if (chunk === null && data === '') {
-        console.error('The output of webpack --json must be piped to webpack-unused');
-        process.exit(1);
-      }
-
-      if (chunk !== null) {
-        data += chunk.toString();
-      }
-    });
-
-    process.stdin.on('end', () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch (e) {
-        console.error('Warning: output does not parse as json');
-        console.error('Attempting to trim to json');
-        const from = data.indexOf('{');
-        const to = data.lastIndexOf('}');
-
-        try {
-          if (from === -1 || to === -1) {
-            throw new Error('NOT_JSON');
-          }
-          resolve(JSON.parse(data.slice(from, to + 1)));
-        } catch (e) {
-          console.error('Output does not appear to be json at all');
-          process.exit(1);
-        }
-      }
-    });
-  });
-};
-
+function withCwd(m) {
+  return m.map(md => Path.join(cwd, md));
+}
 Promise.all([
-  parseStdin().then(selectLocalModules),
-  findAllLocalFiles(cwd)
-]).then((args) => {
+  Promise.resolve(require(statsFile))
+    // .then(flatten.getLocalModules)
+    .then(flatten.getLocalModuleNames)
+    .then(withCwd),
+  findAllLocalFiles(),
+]).then(args => {
   const webpackFiles = args[0];
   const localFiles = args[1];
 
-  const unused = localFiles.filter((file) => webpackFiles.indexOf(file) === -1)
-                           .map((file) => `./${Path.relative(cwd, file)}`);
-  console.log(unused.join('\n'));
+  const localRouteFiles = localFiles.map(file => file.split(' ')[0]);
+  const webpackRouteFields = webpackFiles;
+  const unusedFiles = localRouteFiles.filter(f => webpackRouteFields.indexOf(f) === -1);
+  const unusedFilesStr = unusedFiles.join('\n');
+  // console.log(unusedFilesStr);
+
+  // fs.writeFileSync(Path.join(__dirname, '../dist/unused.txt'), unusedFilesStr);
+  fs.writeFileSync(outputFile, unusedFilesStr);
+  // fs.writeFileSync(Path.join(__dirname, outputFile), unusedFilesStr);
+  // 自动删除
+  if (autodelete) {
+    unusedFiles.forEach(file => {
+      fs.unlinkSync(file);
+    })
+    console.log('file deleted');
+  }
 });
