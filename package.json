@@ -1,7 +1,7 @@
 {
   "name": "webpack-unused-check",
   "description": "Check your frontend code for files/assets that are no longer used.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "ginobilee",
   "bin": {
     "webpack-unused-check": "index.js"
