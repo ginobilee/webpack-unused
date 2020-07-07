@@ -25,7 +25,7 @@ webpack-unused-check --stats dist/stats.json --output dist/unused.txt
 webpack-unused-check -s src
 
 # or auto delete unused files
-webpack-unused-check -s src --stats dist/stats.json --output dist/unused.txt --autodelete
+webpack-unused-check -s src --stats dist/stats.json --output dist/unused.txt --suffix js --autodelete
 
 ```
 

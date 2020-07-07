@@ -21,6 +21,7 @@ const argv = require('yargs')
   .describe('output', 'analyzed unused file result file location')
   .default('output', './dist/unused.txt')
   .describe('autodelete', 'auto delete unused file')
+  .describe('suffix', 'restrict file suffixs to delete')
   // .default('autodelete', '0')
   .help('h')
   .alias('h', 'help').argv;
@@ -30,11 +31,14 @@ const srcDir = Path.resolve(argv.src);
 const statsFile = Path.resolve(argv.stats);
 const outputFile = Path.resolve(argv.output);
 const autodelete = argv.autodelete;
+const suffix = argv.suffix;
 
 const flatten = require('./flatten');
 
 const findAllLocalFiles = () => {
-  return Glob2('!(node_modules)/**/*.*', { cwd: srcDir }).then(files =>
+  const realsuffix = suffix || '*';
+  const localScan = `!(node_modules)/**/*.${realsuffix}`;
+  return Glob2(localScan, { cwd: srcDir }).then(files =>
     files.map(f => Path.join(srcDir, f)),
   );
 };
